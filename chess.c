@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<stdbool.h>
 #include<time.h>
+#include<conio.h>
 #define BoardL 8
 #define BoardW 8
 #define SquareL 5
@@ -195,7 +196,7 @@ void main(void){
         scanf("%d %d", &from->X, &from->Y);
         printf("\n");
 
-        Position* to;
+        Position* to = position_init( 0, 0);
         for(int i = 0; i < Chess_board->boardW/2; i++);
             for( int j = 0; j < SquareW; j++)
                 printf(" ");
@@ -203,25 +204,29 @@ void main(void){
         scanf("%d %d", &to->X, &to->Y);
         printf("\n");
 
-        printf("XXX");
-/*
+        from->X--;
+        from->Y--;
+        to->X--;
+        to->Y--;
         if( Move_piece( Chess_board, Chess_board->board[ from->X][ from->Y], to) == 0){
-            printf("YYY");
             for(int i = 0; i < Chess_board->boardW/2; i++);
                 for( int j = 0; j < SquareW; j++)
                     printf(" ");
             printf("move not viable");
         }
-*/
-    system("cls");
-    i++;
-    }while( i < 5);
+        i++;
+        getchar();
+        system("cls");
+    }while( i < 2);
     //}while( game_finished( Chess_board, kings[0]) == 0 || game_finished( Chess_board, kings[1]) == 0);
-
+    drawBoard( Chess_board);
     Board_free( Chess_board);
 }
 
 bool Move_piece( Board* Board, Piece* figure, Position* move_to){
+    if( Board == NULL) return 0;
+    if( figure == NULL) return 0;
+    if( move_to == NULL) return 0;
     if( move_to->X == figure->pp->X && move_to->Y == figure->pp->Y) return 0;
     if( figure->pp->X < 0 || figure->pp->X > Board->boardL) return 0;
     if( figure->pp->Y < 0 || figure->pp->Y > Board->boardW) return 0;
@@ -239,31 +244,23 @@ bool Move_piece( Board* Board, Piece* figure, Position* move_to){
         Board->board[ move_to->X][ move_to->Y] = figure;
         Board->board[ figure->pp->X][ figure->pp->Y] = NULL;
     }else if( strcmp( figure->equation, Rook_Movement) == 0){
-        printf(" k?");
         if( move_to->X != figure->pp->X && move_to->Y != figure->pp->Y) return 0;
-        int movement_x, movement_y;
-        printf(" ok");
-        if( move_to->X != figure->pp->X){
-            movement_x = move_to->X - figure->pp->X;
-            movement_y = 0;
-        }else{
-            movement_y = move_to->Y - figure->pp->Y;
-            movement_x = 0;
-        }
-        printf(" ok1");
-        for( int i_x = figure->pp->X, i_y = figure->pp->Y;    i_x != move_to->X || i_y != move_to->Y;    i_x += movement_x, i_y += movement_y)
+
+        int m_x = move_to->X - figure->pp->X; // m_x = movement_x
+        int m_y = move_to->Y - figure->pp->Y; // m_y = movement_y
+        if( m_x > 0) m_x = 1;
+        else if( m_x < 0) m_x = -1;
+        if( m_y > 0) m_y = 1;
+        else if( m_y < 0) m_y = -1;
+        for( int i_x = figure->pp->X + m_x, i_y = figure->pp->Y + m_y;    i_x != move_to->X || i_y != move_to->Y;    i_x += m_x, i_y += m_y)
             if( Board->board[i_x][i_y] != NULL) return 0;
-        printf(" ok2");
 
         if( Board->board[ move_to->X][ move_to->Y] != NULL){
             if( Board->board[ move_to->X][ move_to->Y]->Team == figure->Team) return 0;
             else Piece_free( Board->board[ move_to->X][ move_to->Y]);
         }
-        printf(" ok3");
         Board->board[ move_to->X][ move_to->Y] = figure;
         Board->board[ figure->pp->X][ figure->pp->Y] = NULL;
-
-        printf(" ok4");
     }
     printf("\n");
     return 1;

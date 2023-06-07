@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<stdbool.h>
 #include<time.h>
+#include<math.h>
 #include<conio.h>
 #define BoardL 8
 #define BoardW 8
@@ -15,16 +16,18 @@ const char* Rook_Movement = "y|X = +- BoardW|BoardL";
 const bool Rook_design[SquareL][SquareW] = {    {0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0},
                                                 {0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0},
                                                 {0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0},
-                                                {0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0},
-                                                {0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}   };
-
-const bool King_design[SquareL][SquareW] = {    {0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0},
-                                                {0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0},
-                                                {0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0},
                                                 {0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0},
                                                 {0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0}   };
 
+const bool King_design[SquareL][SquareW] = {    {0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0},
+                                                {0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0},
+                                                {0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0},
+                                                {0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0},
+                                                {0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}   };
+
 const bool null_design[SquareW] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+const int infinity =  2147483647;
 
 typedef struct{
     int X;
@@ -36,7 +39,7 @@ typedef struct{
     Position* pp;
     char equation[40];
     char Team; // White|Black
-    char color; // @   |  .
+    char color; // @   |  :
 } Piece;
 
 typedef struct{
@@ -45,9 +48,11 @@ typedef struct{
     Piece* board[ BoardL][BoardW];
 } Board;
 
+
 bool is_checkmate( Board* Board, Piece* king);
 bool is_stalemate( Board* Board, Piece* king);
-bool game_finished( Board* Board, Piece* king);
+bool is_draw( Board* Board);
+//bool game_finished( Board* Board, Piece* king);
 bool Move_piece( Board* Board, Piece* figure, Position* move_to);
 bool Point_safe( Board* Board, Piece* safe_for, Position* point);
 
@@ -154,6 +159,121 @@ void drawBoard( Board* board){
     }
 }
 
+int evaluate_game_status( Board* Field){ // figures eaten up, number of safe points, proximity to rooks;
+    Piece* Black_king = NULL;
+
+    int total_score = Field->boardL * Field->boardW;
+    int current_score = 0;
+
+    int safe_points = 0;
+    Position* temp = position_init( 0, 0);
+    for( int i_x = -1; i_x < 2; i_x++){
+        for( int i_y = -1; i_y < 2; i_y++){
+            temp->X = Black_king->pp->X + i_x;
+            temp->Y = Black_king->pp->Y + i_y;
+            if( Point_safe( Field, Black_king, temp) == 1) safe_points++;
+        }
+    }
+    int score_for_point = total_score / 9;
+    if( safe_points == 0) return total_score;
+    else current_score = (safe_points * score_for_point) / 3; // num of safe points is 1/3 of equation;
+    free( temp);
+
+
+    Piece* Rook1 = NULL;
+    Piece* Rook2 = NULL;
+    for( int i_x = 0; i_x < Field->boardL; i_x++){ // weed
+        for( int i_y = 0; i_y < Field->boardW; i_y++){
+            if( Field->board[ i_x][ i_y] != NULL){
+                if( strcmp( Field->board[ i_x][ i_y]->equation, King_Movement) != 0){
+                    status += ( total_score / 2);
+                    if( Rook1 == NULL) Rook1 = Field->board[ i_x][ i_y];
+                    else Rook2 = Field->board[ i_x][ i_y];
+                }
+            }
+        }
+    }
+
+
+    int distance;
+    int temp_x, temp_y;
+
+    if( Rook1 != NULL){
+        temp_x = Rook1->pp->X - Black_king->pp->X;
+        temp_x = Rook1->pp->Y - Black_king->pp->Y;
+        distance = sqrt( temp_x*temp_x + temp_y*temp_y);
+        current_score += distance;
+    }
+
+    if( Rook2 != NULL){
+        temp_x = Rook2->pp->X - Black_king->pp->X;
+        temp_x = Rook2->pp->Y - Black_king->pp->Y;
+        distance = sqrt( temp_x*temp_x + temp_y*temp_y);
+        current_score += distance;
+    }
+
+    return current_score;
+}
+
+typedef struct ll_pieces_temp{
+    struct ll_pieces_temp* next_node;
+    Piece* current_figure;
+} LL_PIECES;
+
+int mini( Board* Field, LL_PIECES* our_team, LL_PIECES* their_team, int deaph){
+    if( deaph == 0) return evaluate_game_status( Field);
+
+    Position* moving_to = position_init( 0, 0);
+    Position* original_position = position_init( 0, 0);
+
+    Position* best_to_move = position_init( 0, 0); // point of piece we should move
+    Position* best_move_to = position_init( 0, 0); // where we should move that piece
+
+    int min = infinity; // number representing how good is a move
+
+    while( our_team != NULL){
+        original_position->X = our_team->current_figure->pp->X;
+        original_position->Y = our_team->current_figure->pp->Y;
+
+        if( strcmp( our_team->current_figure->equation, Rook_Movement) == 0){
+
+            for( int i_x = 0; i_x < Field->boardL; i_x++){
+                for( int i_y = 0; i_y < Field->boardW; i_y++){
+                    moving_to->X = i_x;
+                    moving_to->Y = i_y;
+                    Move_piece( Field, our_team->current_figure, moving_to);
+                    maxi( Field, their_team, our_team, deaph - 1);
+                    Move_piece( Field, our_team->current_figure, original_position);
+                }
+            }
+
+        }else{
+            for( int  i_x = -1; i_x < 2; i_x++){
+                for( int i_y = -1; i_y < 2; i_y++){
+                    moving_to->X = our_team->current_figure->pp->X + i_x;
+                    moving_to->Y = our_team->current_figure->pp->Y + i_y;
+                    Move_piece( Field, our_team->current_figure, moving_to);
+                    maxi( Field, their_team, our_team, deaph - 1);
+                    Move_piece( Field, our_team->current_figure, original_position);
+                }
+            }
+        }
+
+        our_team = our_team->next_node;
+    }
+
+    free( moving_to);
+    free( original_position);
+    free( best_move_to);
+    free( best_to_move);
+}
+
+int maxi( Board* Field, LL_PIECES* our_team, LL_PIECES* their_team ,int deaph){
+    if( deaph == 0) return evaluate_game_status( Field);
+
+}
+
+
 void main(void){
     srand( time(NULL));
     Board* Chess_board = board_init( BoardL, BoardW);
@@ -173,7 +293,7 @@ void main(void){
             do i_x = rand()%Chess_board->boardL, i_y = rand()%Chess_board->boardW;
             while( Chess_board->board[i_x][i_y] != NULL);
 
-            if( pieces[i][0] == 'B') color = '.';
+            if( pieces[i][0] == 'B') color = ':';
             else color = '@';
 
             if( pieces[i][1] == 'K') iter = Piece_init( King_Movement, 'K', i_x, i_y, pieces[i][0], color);
@@ -187,8 +307,20 @@ void main(void){
     int i = 0;
     Piece_free( iter);
 
-
     do{
+        if( is_checkmate( Chess_board, kings[1])){
+            printf("\n Black is checkmate!");
+            break;
+        }
+        if( is_stalemate( Chess_board, kings[1])){
+            printf("\n Black is stalemate!");
+            break;
+        }
+        if( is_draw( Chess_board)){
+            printf("\n Game is draw!");
+            break;
+        }
+
         drawBoard( Chess_board);
 
         printf(" \n");
@@ -219,22 +351,12 @@ void main(void){
             printf("move not viable");
         }
         i++;
-        //getchar();
-        system("cls");
-        if( is_checkmate( Chess_board, kings[1])){
-            printf("\n Black is checkmate");
-        }
-        if( is_stalemate( Chess_board, kings[1])){
-            printf("\n Black is stalemate");
-        }
-        if( game_finished( Chess_board, kings[1])){
-            printf("\n game finished. Black lost");
-        }
         getchar();
+        system("cls");
 
 
-    }while( i < 10);
-    //}while( game_finished( Chess_board, kings[0]) == 0 && game_finished( Chess_board, kings[1]) == 0);
+    //}while( i < 10);
+    }while( 1);
     drawBoard( Chess_board);
     Board_free( Chess_board);
     Piece_free( kings[ 0]);
@@ -250,6 +372,8 @@ bool Move_piece( Board* Board, Piece* figure, Position* move_to){
     if( figure->pp->Y < 0 || figure->pp->Y > Board->boardW) return 0;
     if( move_to->X < 0 || Board->boardL < move_to->X) return 0;
     if( move_to->Y < 0 || Board->boardW < move_to->Y) return 0;
+    if( Board->board[ move_to->X][ move_to->Y] != NULL)
+        if( Board->board[ move_to->X][ move_to->Y]->Team == figure->Team) return 0; // cannot take from your team
     //printf("\n hello");
 
     if( Board->board[ move_to->X][ move_to->Y] != NULL)
@@ -259,16 +383,18 @@ bool Move_piece( Board* Board, Piece* figure, Position* move_to){
         if( move_to->X - figure->pp->X > 1 || move_to->X - figure->pp->X < -1) return 0;
         if( move_to->Y - figure->pp->Y > 1 || move_to->Y - figure->pp->Y < -1) return 0;
         if( Point_safe( Board, figure, move_to) == 0) return 0;
-        printf("\n we");
+        //printf("\n we");
         if( Board->board[ move_to->X][ move_to->Y] != NULL)
             Piece_free( Board->board[ move_to->X][ move_to->Y]);
         Board->board[ move_to->X][ move_to->Y] = figure;
         Board->board[ figure->pp->X][ figure->pp->Y] = NULL;
         figure->pp->X = move_to->X;
         figure->pp->Y = move_to->Y;
-        printf("\n good?");
+        //printf("\n good?");
     }else if( strcmp( figure->equation, Rook_Movement) == 0){
         if( move_to->X != figure->pp->X && move_to->Y != figure->pp->Y) return 0;
+        if( Board->board[ move_to->X][ move_to->Y] != NULL)
+            if( strcmp( Board->board[ move_to->X][ move_to->Y]->equation, King_Movement) == 0) return; // cannot take a king
         //printf("\n whats");
         int m_x = move_to->X - figure->pp->X; // m_x = movement_x
         int m_y = move_to->Y - figure->pp->Y; // m_y = movement_y
@@ -357,6 +483,7 @@ bool is_checkmate( Board* Board, Piece* king){
         for( int j = -1; j < 2; j++){
             iter->X = king->pp->X+i;
             iter->Y = king->pp->Y+j;
+//            printf("\n %d %d safe? ", iter->X, iter->Y);
             if( Point_safe( Board, king, iter)) return 0;// safe around
         }
     }
@@ -376,6 +503,7 @@ bool is_stalemate( Board* Board, Piece* king){
             if( i == 0 && j == 0) j++;
             iter->X = king->pp->X+i;
             iter->Y = king->pp->Y+j;
+//            printf("\n %d %d safe? ", iter->X, iter->Y);
             if( Board->board[ iter->X][ iter->Y] == king);
             else if( Point_safe( Board, king, iter)) return 0;// safe around
         }
@@ -386,11 +514,27 @@ bool is_stalemate( Board* Board, Piece* king){
     return 1;
 }
 
-bool game_finished( Board* Board, Piece* king){
-    if( is_checkmate( Board, king) == 1) return 1;
-    if( is_stalemate( Board, king) == 1) return 1;
-    return 0;
+bool is_draw( Board* Board){
+    for( int i_x = 0; i_x < Board->boardL; i_x++){
+        for( int i_y = 0; i_y < Board->boardW; i_y++){
+            if( Board->board[ i_x][ i_y] != NULL){
+                if( strcmp( Board->board[ i_x][ i_y]->equation, King_Movement) != 0) return 0;
+            }
+        }
+    }
+    return 1;
 }
+
+
+//bool game_finished( Board* Board, Piece* king){
+//    bool decision;
+//    printf("\n checking %c %c", king->Team, king->shape);
+//    if( is_checkmate( Board, king) == 1) decision = 1;
+//    else if( is_stalemate( Board, king) == 1) decision = 1;
+//    else decision =  0;
+//    printf("\n decision = %d", decision);
+//    return decision;
+//}
 
 /*
     for( int i = 0; i < Chess_board->boardL; i++){
